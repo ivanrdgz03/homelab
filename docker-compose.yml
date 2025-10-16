@@ -163,8 +163,8 @@ services:
     container_name: jackett
     image: lscr.io/linuxserver/jackett:latest
     environment:
-      - PUID=${UID_SWAG}
-      - PGID=${GID_SWAG}
+      - PUID=${UID_JACKETT}
+      - PGID=${GID_JACKETT}
       - TZ=${TIMEZONE}
       - AUTO_UPDATE=TRUE
     volumes:
