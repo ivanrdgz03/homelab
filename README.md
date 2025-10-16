@@ -102,7 +102,7 @@ Basado en el `docker-compose.yml`, estos son los servicios incluidos y sus puert
 
 ## Variables de entorno (.env) — plantilla
 
-En el fichero .env.example hay una plantilla con las variables observadas en `docker-compose.yml`. Revisa y adapta según tus rutas, UID/GID y preferencias.
+En el fichero `.env.example` hay una plantilla con las variables observadas en `docker-compose.yml`. Revisa y adapta según tus rutas, UID/GID y preferencias.
 
 Consejo: Usa UID/PGID del usuario del host que debe tener acceso a los datos para evitar problemas de permisos.
 - Permisos en volúmenes: Si ves errores de permisos, revisa PUID/PGID y propietarios en el host.
