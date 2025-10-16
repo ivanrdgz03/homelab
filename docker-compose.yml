@@ -1,0 +1,275 @@
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /portainer/data:/data
+    ports:
+      - 9000:9000
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:latest
+    container_name: duckdns
+    user: ${DUCKDNS_USER}:${DUCKDNS_GROUP}
+    environment:
+      - TZ=${TIMEZONE}
+      - SUBDOMAINS=${DOMINIO}
+      - TOKEN=${TOKEN_DUCKDNS}
+      - UPDATE_IP=ipv4
+    volumes:
+      - ${DUCKDNS_FOLDER}/config:/config
+    restart: unless-stopped
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    user: ${JELLYFIN_USER}:${JELLYFIN_GROUP}
+    environment:
+      - TZ=${TIMEZONE}
+    ports:
+      - 8096:8096
+    volumes:
+      - ${JELLYFIN_CONFIG}/jellyfin/config:/config
+      - ${JELLYFIN_CACHE}:/cache
+      - ${JELLYFIN_CACHE}/transcode:/data/transcode # Buffer por si la ram es poca
+      - ${MEDIA}:/data/media
+    restart: 'unless-stopped'
+    devices:
+      - /dev/dri:/dev/dri #grafica para transcoding
+
+  nginx:
+    image: docker.io/jc21/nginx-proxy-manager:latest
+    container_name: nginx
+    ports:
+      - 80:80
+      - 443:443
+      - 81:81
+    dns:
+      - ${DNS_NGINX}
+    environment:
+      TZ: ${TIMEZONE}
+      INITIAL_ADMIN_EMAIL: ${EMAIL}
+      INITIAL_ADMIN_PASSWORD: ${PASSWORD}
+      DB_MYSQL_HOST: "nginx_db"
+      DB_MYSQL_PORT: 3306
+      DB_MYSQL_USER: "${DB_NGINX_USER}"
+      DB_MYSQL_PASSWORD: "${PASSWORD}"
+      DB_MYSQL_NAME: "npm"
+    volumes:
+      - ${NGINX_CONFIG}:/data
+      - ${NGINX_CONFIG}/letsencrypt:/etc/letsencrypt
+    restart: unless-stopped
+    depends_on:
+      - nginx_db
+      - authelia
+  authelia:
+    container_name: 'authelia'
+    image: 'authelia/authelia:latest'
+    restart: 'unless-stopped'
+    ports:
+      - 9092:9091
+    volumes:
+      - ${AUTHELIA_FOLDER}/config:/config       # importante: monta toda la carpeta config
+      - ${AUTHELIA_FOLDER}/db:/var/lib/authelia
+    environment:
+      TZ: ${TIMEZONE}
+  nginx_db:
+    image: jc21/mariadb-aria:latest
+    container_name: nginx_db
+    restart: unless-stopped
+    environment:
+      TZ: ${TIMEZONE}
+      MYSQL_ROOT_PASSWORD: '${PASSWORD}'
+      MYSQL_DATABASE: 'npm'
+      MYSQL_USER: ${NGINX_DB_USER}
+      MYSQL_PASSWORD: ${PASSWORD}
+      MARIADB_AUTO_UPGRADE: '1'
+    volumes:
+      - ${NGINX_DB_FOLDER}:/var/lib/mysql
+    ports:
+      - 3306:3306
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${UID_SONARR}
+      - PGID=${PGID_SONARR}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${SONARR_FOLDER}/data:/config
+      - ${SONARR_FOLDER}
+      - ${MEDIA}:/data/media
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${UID_RADARR}
+      - PGID=${PGID_RADARR}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${RADARR_FOLDER}/data:/config
+      - ${RADARR_FOLDER}
+      - ${MEDIA}:/data/media
+    ports:
+      - 7878:7878
+    restart: unless-stopped
+  jellyseerr:
+    container_name: jellyseerr
+    image: fallenbagel/jellyseerr:latest
+    environment:
+      - PUID=${UID_JELLYSEERR}
+      - PGID=${PGID_JELLYSEERR}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${JELLYSEERR_FOLDER}/config:/app/config
+    ports:
+      - 5055:5055
+    restart: unless-stopped
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=${UID_QBIT}
+      - PGID=${PGID_QBIT}
+      - TZ=${TIMEZONE}
+      - WEBUI_PORT=9093
+      - TORRENTING_PORT=6881
+    volumes:
+      - ${QBIT_FOLDER}/appdata:/config
+      - ${MEDIA}:/data/media
+    ports:
+      - 9093:9093
+      - 6881:6881
+      - 6881:6881/udp
+    restart: unless-stopped
+  torproxy:
+    image: dperson/torproxy:latest
+    container_name: torproxy
+    ports:
+      - 8118:8118
+      - 9050:9050
+    environment:
+      - TZ=${TIMEZONE}
+      - PASSWORD=${TORPROXY_PASSWORD}
+      - TOR_NewCircuitPeriod=300
+      - TOR_MaxCircuitDirtiness=300
+      #- EXITNODE={US} Salida por US
+    restart: unless-stopped
+  jackett:
+    container_name: jackett
+    image: lscr.io/linuxserver/jackett:latest
+    environment:
+      - PUID=${UID_SWAG}
+      - PGID=${GID_SWAG}
+      - TZ=${TIMEZONE}
+      - AUTO_UPDATE=TRUE
+    volumes:
+      - ${JACKETT_FOLDER}/config:/config
+      - ${JACKETT_FOLDER}/blackhole:/downloads
+    ports:
+      - 9117:9117
+    restart: unless-stopped
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "82:80/tcp"
+    environment:
+      PIHOLE_UID: ${UID_PIHOLE}
+      PIHOLE_GID: ${PGID_PIHOLE}
+      TZ: ${TIMEZONE}
+      FTLCONF_webserver_api_password: ${PASSWORD_PIHOLE}
+      FTLCONF_dns_listeningMode: 'all'
+    dns:
+      - 192.168.1.1
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - '${PIHOLE_FOLDER}:/etc/pihole'
+    restart: unless-stopped
+  speedtest:
+    container_name: speedtest
+    image: lscr.io/linuxserver/speedtest-tracker:latest
+    environment:
+      - PUID=${UID_SPEEDTEST}
+      - PGID=${PGID_SPEEDTEST}
+      - TZ=${TIMEZONE}
+      - DB_CONNECTION=sqlite
+      - SPEEDTEST_SCHEDULE=*/30 * * * *
+      - APP_URL=${URL_SPEEDTEST}
+      - APP_TIMEZONE=${TIMEZONE}
+      - DISPLAY_TIMEZONE=${TIMEZONE}
+      - DATETIME_FORMAT=j M Y, G:i
+      - CHART_DATETIME_FORMAT=j/m G:i
+      - PUBLIC_DASHBOARD=false
+      - APP_KEY=${SPEEDTEST_KEY}
+      - ADMIN_EMAIL=${EMAIL}
+      - ADMIN_PASSWORD=${PASSWORD_SPEEDTEST}
+      - APP_NAME=Speedtest
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_TOKEN}
+    volumes:
+      - ${SPEEDTEST_FOLDER}:/config
+    dns:
+      - ${SERVIDOR_DNS}
+    ports:
+      - 85:80
+    restart: unless-stopped
+  wireguard: 
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE #optional
+    environment:
+      - WG_DEFAULT_DNS=${WG_DNS}
+      - LANG=es
+      - WG_HOST=${WG_HOST}
+      - PASSWORD_HASH=${PASSWORD_HASH}
+      - WG_PORT=51820
+    volumes:
+      - ${WG_FOLDER}/:/etc/wireguard
+    ports: 
+      - 51820:51820/udp
+      - 51821:51821/tcp 
+    sysctls: 
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+    restart: unless-stopped
+  watchtower:
+    container_name: watchtower
+    image: containrrr/watchtower:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_NOTIFICATIONS=shoutrrr
+      - WATCHTOWER_NOTIFICATION_URL=telegram://${TELEGRAM_TOKEN}@telegram?chats=${TELEGRAM_CHATID}
+      - TZ=${TIMEZONE}
+    command: --monitor-only --interval 86400
+    restart: always
+
+  hbbs:
+    container_name: hbbs
+    image: rustdesk/rustdesk-server:latest
+    command: hbbs
+    volumes:
+      - ${RD_FOLDER}/data:/root
+    network_mode: "host"
+
+    depends_on:
+      - hbbr
+    restart: unless-stopped
+
+  hbbr:
+    container_name: hbbr
+    image: rustdesk/rustdesk-server:latest
+    command: hbbr
+    volumes:
+      - ${RD_FOLDER}/data:/root
+    network_mode: "host"
+    restart: unless-stopped
